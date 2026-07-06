@@ -1,0 +1,14 @@
+# Raw Cricsheet JSON (103MB, 1,243 match files) -- present on disk for anyone
+# who has run this pipeline locally, but not committed to keep the repo lean.
+# Re-download from https://cricsheet.org/downloads/ipl_json.zip if missing
+# (see README.md in this folder).
+cricsheet_raw/
+
+# Generated output -- never committed. This is a separate, disposable build
+# artifact; data/raw/ipl_data.xlsx (the file the rest of the project
+# actually reads) is never written to by this pipeline.
+output/
+
+.DS_Store
+__pycache__/
+*.pyc
