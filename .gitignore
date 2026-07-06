@@ -6,3 +6,6 @@ reports/figures/*.png
 # Raw dataset -- not published to GitHub (see README.md for how to obtain it
 # and place it here before running run_all.py or pytest).
 data/raw/ipl_data.xlsx
+
+# Personal reference copies only -- not part of the published project.
+notebooks/
