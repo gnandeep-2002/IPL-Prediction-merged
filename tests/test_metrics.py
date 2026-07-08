@@ -4,7 +4,7 @@ Tests for calibration metric functions (src.metrics).
 import numpy as np
 import pytest
 
-from src.metrics import brier_skill_score, ece
+from src.metrics import brier_skill_score, calibration_bins, ece
 
 
 def _clim(y_true):
@@ -113,3 +113,60 @@ class TestBrierSkillScore:
         test_clim  = _clim(y_true)
         bss_test   = brier_skill_score(y_true, y_prob, test_clim)
         assert bss_train != pytest.approx(bss_test, abs=1e-6)
+
+
+class TestCalibrationBins:
+
+    def test_perfect_calibration_lands_on_diagonal(self):
+        """When predicted probability equals actual frequency, every bin's
+        pred_mean and obs_freq must match (a reliability diagram's diagonal)."""
+        y_true = np.array([1, 0, 1, 0, 1, 0, 1, 0, 1, 0])
+        y_prob = np.full(10, 0.5)
+        bins = calibration_bins(y_true, y_prob)
+        assert len(bins) == 1
+        assert bins[0]["pred_mean"] == pytest.approx(0.5)
+        assert bins[0]["obs_freq"] == pytest.approx(0.5)
+
+    def test_empty_bins_are_omitted(self):
+        """Bins with zero samples must not appear in the output at all."""
+        y_true = np.array([1, 0, 1, 0])
+        y_prob = np.array([0.05, 0.05, 0.95, 0.95])  # only bins 0 and 9 populated
+        bins = calibration_bins(y_true, y_prob, n_bins=10)
+        assert len(bins) == 2
+
+    def test_counts_sum_to_total_samples(self):
+        np.random.seed(3)
+        y_true = np.random.randint(0, 2, 250)
+        y_prob = np.random.uniform(0, 1, 250)
+        bins = calibration_bins(y_true, y_prob, n_bins=10)
+        assert sum(b["count"] for b in bins) == 250
+
+    def test_pred_mean_within_bin_edges(self):
+        """Each bin's pred_mean must fall within that bin's [lo, hi) range."""
+        np.random.seed(4)
+        y_true = np.random.randint(0, 2, 500)
+        y_prob = np.random.uniform(0, 1, 500)
+        n_bins = 10
+        edges = np.linspace(0, 1, n_bins + 1)
+        bins = calibration_bins(y_true, y_prob, n_bins=n_bins)
+        # bins are returned in increasing-edge order, one per non-empty bin
+        populated_edges = [(lo, hi) for lo, hi in zip(edges[:-1], edges[1:])
+                            if ((y_prob >= lo) & (y_prob < hi)).sum() > 0]
+        for b, (lo, hi) in zip(bins, populated_edges):
+            assert lo <= b["pred_mean"] < hi or b["pred_mean"] == pytest.approx(hi, abs=1e-9)
+
+    def test_ece_matches_manual_weighted_sum_of_bins(self):
+        """ece() must equal the count-weighted mean |obs_freq - pred_mean|
+        computed directly from calibration_bins(), since ece() is now built
+        on top of it."""
+        np.random.seed(5)
+        y_true = np.random.randint(0, 2, 300)
+        y_prob = np.random.uniform(0, 1, 300)
+        bins = calibration_bins(y_true, y_prob, n_bins=10)
+        manual = sum((b["count"] / 300) * abs(b["obs_freq"] - b["pred_mean"]) for b in bins)
+        assert ece(y_true, y_prob, n_bins=10) == pytest.approx(manual, abs=1e-9)
+
+    def test_returns_empty_list_for_empty_input(self):
+        y_true = np.array([])
+        y_prob = np.array([])
+        assert calibration_bins(y_true, y_prob) == []

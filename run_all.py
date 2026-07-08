@@ -15,15 +15,20 @@ from src.pipeline import (
     load_and_prepare, train_pre_match_internal, build_dynamic_2nd,
     build_dynamic_1st, train_dynamic_internal, phase_specific_eval,
     train_score_zoo_and_save, retrain_pre_match_full, evaluate_2026_pre_match,
-    PRE_FEAT,
+    compare_calibration_methods_dyn2,
+    PRE_FEAT, DYN2,
 )
 from src.explainability import shap_importance
 from src.tournament import actual_points_table, predicted_points_table, compare_tables
+from src.elo import compute_elo_history
+from src.metrics import calibration_bins
+from src.dashboard_export import update_dashboard_data
 
 DATA_XLSX = "data/raw/ipl_data.xlsx"
 PM26_CSV = "data/external_2026/prematch_dataset.csv"
 IG26_CSV = "data/external_2026/ingame_dataset.csv"
 SCORE_PIPELINE_PATH = "models/ipl_score_pipeline.pkl"
+DASHBOARD_HTML_PATH = "dashboard/index.html"
 
 
 def main() -> None:
@@ -93,6 +98,41 @@ def main() -> None:
     print(f"   Predicted table topper: {cmp['predicted_topper']}  "
           f"({'CORRECT' if cmp['topper_correct'] else 'WRONG'})")
     print(f"   Top-4 overlap: {cmp['top4_overlap_count']}/4  {cmp['top4_overlap']}")
+
+    print("\n8. CALIBRATION RELIABILITY (pre-match Cal. GBT + dynamic 2nd-innings)")
+    bins_pm_gbt = calibration_bins(pre["y_te"], pre["p_gbt"])
+    p_dyn2_test = dyn["dyn2_model"].predict_proba(dyn["dsc2"].transform(dyn["test2"][DYN2]))[:, 1]
+    bins_dyn2 = calibration_bins(dyn["test2"]["chasing_wins"].values, p_dyn2_test)
+    print(f"   Pre-match Cal. GBT: {len(bins_pm_gbt)} populated bins (see dashboard for the reliability diagram)")
+    print(f"   Dynamic 2nd innings: {len(bins_dyn2)} populated bins (see dashboard for the reliability diagram)")
+
+    print("\n9. TEAM ELO TRAJECTORIES (2008-2025)")
+    elo_history = compute_elo_history(match_df)
+    print(f"   Computed Elo history for {len(elo_history)} teams "
+          f"({sum(len(v) for v in elo_history.values())} match-level data points total)")
+
+    print("\n10. TEMPERATURE SCALING vs. ISOTONIC CALIBRATION (dynamic 2nd innings)")
+    calib_compare = compare_calibration_methods_dyn2(df2)
+    t = calib_compare["temperature"]
+    iso = calib_compare["isotonic"]
+    print(f"   Temperature-scaled (T={t['T']}): Brier {t['brier_raw']}->{t['brier_cal']}  "
+          f"AUC {t['auc_raw']}->{t['auc_cal']}  ECE {t['ece_raw']}->{t['ece_cal']}")
+    print(f"   Isotonic (default):              Brier {iso['brier']}  AUC {iso['auc']}  ECE {iso['ece']}")
+    print("   NOTE: both methods start from the same uncalibrated LogisticRegression; "
+          "isotonic is this pipeline's default (see src/models.py) -- temperature scaling "
+          "is shown for comparison only, not as a replacement.")
+
+    print("\nExporting fresh results to dashboard/index.html...")
+    update_dashboard_data({
+        "pre_match_reliability": {
+            "cal_gbt": bins_pm_gbt,
+        },
+        "dyn2_reliability": {
+            "isotonic": bins_dyn2,
+        },
+        "elo_history": elo_history,
+        "calibration_comparison": calib_compare,
+    }, DASHBOARD_HTML_PATH)
 
     print("\nDone.")
 

@@ -92,11 +92,14 @@ def compare_calibration(
     Fit temperature on val, apply to test, return before/after metrics.
 
     Returns a dict with: T, brier_raw, brier_cal, logloss_raw, logloss_cal,
-    auc_raw, auc_cal, ece_raw, ece_cal.
+    auc_raw, auc_cal, ece_raw, ece_cal, bins_raw, bins_cal (the last two are
+    per-bin reliability-diagram data from src.metrics.calibration_bins(),
+    one for the raw probabilities and one for the temperature-scaled ones,
+    so both can be plotted side by side).
     """
     from sklearn.metrics import log_loss, roc_auc_score, brier_score_loss
 
-    from src.metrics import ece
+    from src.metrics import calibration_bins, ece
 
     scaler = TemperatureScaler().fit(probs_val, y_val)
     cal_test = scaler.transform(probs_test)
@@ -112,4 +115,6 @@ def compare_calibration(
         "auc_cal": round(roc_auc_score(y_test, cal_test), 4),
         "ece_raw": round(ece(np.asarray(y_test), np.asarray(probs_test), n_bins=n_bins), 4),
         "ece_cal": round(ece(np.asarray(y_test), np.asarray(cal_test), n_bins=n_bins), 4),
+        "bins_raw": calibration_bins(np.asarray(y_test), np.asarray(probs_test), n_bins=n_bins),
+        "bins_cal": calibration_bins(np.asarray(y_test), np.asarray(cal_test), n_bins=n_bins),
     }

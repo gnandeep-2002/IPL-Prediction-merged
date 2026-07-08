@@ -60,3 +60,27 @@ def test_compare_calibration_returns_expected_keys():
                       "logloss_cal", "auc_raw", "auc_cal", "ece_raw", "ece_cal"}
     assert expected_keys.issubset(result.keys())
     assert result["model"] == "dummy"
+
+
+def test_compare_calibration_bins_are_consistent_with_scalar_ece():
+    """bins_raw/bins_cal (for a side-by-side reliability diagram) must be
+    the exact same binning that produced ece_raw/ece_cal -- not an
+    independent, possibly-inconsistent second computation."""
+    from src.metrics import ece
+
+    rng = np.random.default_rng(6)
+    p_val = rng.uniform(0.05, 0.95, 400)
+    y_val = (rng.uniform(size=400) < p_val).astype(int)
+    p_test = rng.uniform(0.05, 0.95, 400)
+    y_test = (rng.uniform(size=400) < p_test).astype(int)
+
+    result = compare_calibration("dummy", p_val, y_val, p_test, y_test, n_bins=10)
+
+    assert "bins_raw" in result and "bins_cal" in result
+    assert len(result["bins_raw"]) > 0
+    assert len(result["bins_cal"]) > 0
+    for b in result["bins_raw"] + result["bins_cal"]:
+        assert {"pred_mean", "obs_freq", "count"}.issubset(b.keys())
+
+    manual_ece_raw = sum((b["count"] / 400) * abs(b["obs_freq"] - b["pred_mean"]) for b in result["bins_raw"])
+    assert manual_ece_raw == pytest.approx(result["ece_raw"], abs=1e-3)

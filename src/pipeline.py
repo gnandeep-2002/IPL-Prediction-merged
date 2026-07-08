@@ -32,7 +32,7 @@ from sklearn.preprocessing import StandardScaler
 from src.data import ABBREV, load_ball_by_ball, build_match_table
 from src.elo import compute_elo
 from src.features import compute_form_h2h, compute_h2h_beta
-from src.metrics import brier_skill_score, ece
+from src.metrics import brier_skill_score, calibration_bins, ece
 from src.models import make_score_zoo
 
 PRE_FEAT = ["elo_diff", "form_diff", "h2h", "toss_bat_first", "toss_field_first"]
@@ -298,4 +298,55 @@ def evaluate_2026_pre_match(match_df: pd.DataFrame, pre_model, sc_pre, pm26_path
         "accuracy": acc, "k": k, "n": n, "ci": (ci_lo, ci_hi), "p_value": p_val,
         "naive_baseline_acc": naive_acc, "pm26": pm26, "elo_2025": elo_2025,
         "pre_df": pre_df,
+    }
+
+
+def compare_calibration_methods_dyn2(df2: pd.DataFrame) -> dict:
+    """
+    Compares isotonic calibration (the pipeline's default, via
+    CalibratedClassifierCV in train_dynamic_internal) against temperature
+    scaling (src/temperature_scaling.py) for the dynamic 2nd-innings model.
+
+    Both start from the same uncalibrated LogisticRegression fit on the
+    same training years. Temperature scaling additionally needs its own
+    held-out validation split to fit its single scalar T -- carved out of
+    the training years (2019-2020) rather than reusing the test years
+    (2021+), so T is never fit on the same data used to report its result.
+    The isotonic comparator is refit on train+val combined (matching how
+    its internal 5-fold CV already uses all of that data), so both methods
+    get a fair, equally-sized effective training set for this comparison.
+    """
+    from src.temperature_scaling import compare_calibration
+
+    train2 = df2[df2["year"] <= 2018]
+    val2 = df2[(df2["year"] > 2018) & (df2["year"] <= 2020)]
+    test2 = df2[df2["year"] > 2020]
+
+    sc = StandardScaler()
+    X_tr = sc.fit_transform(train2[DYN2])
+    X_val = sc.transform(val2[DYN2])
+    X_te = sc.transform(test2[DYN2])
+    y_val = val2["chasing_wins"].values
+    y_te = test2["chasing_wins"].values
+
+    base = LogisticRegression(C=1.0, max_iter=500)
+    base.fit(X_tr, train2["chasing_wins"].values)
+    p_val = base.predict_proba(X_val)[:, 1]
+    p_te = base.predict_proba(X_te)[:, 1]
+
+    temp_result = compare_calibration("Dynamic 2nd (temperature-scaled)", p_val, y_val, p_te, y_te)
+
+    train_val2 = pd.concat([train2, val2])
+    iso_model = CalibratedClassifierCV(LogisticRegression(C=1.0, max_iter=500), method="isotonic", cv=5)
+    iso_model.fit(sc.transform(train_val2[DYN2]), train_val2["chasing_wins"].values)
+    p_iso = iso_model.predict_proba(X_te)[:, 1]
+
+    return {
+        "temperature": temp_result,
+        "isotonic": {
+            "brier": round(float(brier_score_loss(y_te, p_iso)), 4),
+            "auc": round(float(roc_auc_score(y_te, p_iso)), 4),
+            "ece": round(float(ece(y_te, p_iso)), 4),
+            "bins": calibration_bins(y_te, p_iso),
+        },
     }
