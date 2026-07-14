@@ -11,16 +11,19 @@ ipl_data.xlsx does not carry those columns, so this module computes them
 here with vectorised pandas groupby/cumsum operations (adapting the
 approach, not just relocating the same columns).
 
-Feature layout (unchanged from the original, indices 0-23):
+Feature layout (indices 0-23; index 1 changed vs. the original -- DEF-005):
     0  over / 20
-    1  legal_balls_total / 120
+    1  legal_balls_before / 120  (balls bowled BEFORE this delivery -- the
+       feature vector is strictly pre-ball, so it must not encode whether
+       the imminent delivery is legal; legal_balls_total is still computed
+       as a validation column, see DEF-005)
     2  innings==2 flag
     3-5 phase one-hot (0=Powerplay, 1=Middle, 2=Death)
     6  score_before / 250
     7  wickets_before / 10
     8  run_rate, clipped at 15/over
     9  runs in the last completed over / 30
-    10 wickets in the last 5 overs / 5
+    10 wickets in the last 5 overs (last 30 LEGAL balls, DEF-006) / 5
     11 partnership_runs / 150
     12 partnership_balls / 60
     13 batter_sr_innings / 200
@@ -34,26 +37,26 @@ Feature layout (unchanged from the original, indices 0-23):
     21 required_rr, clipped at 36/over (innings 2 only)
     22 toss_won_bat (1 if the toss winner chose to bat)
     23 innings==2 flag (duplicate of index 2, kept for parity with the original)
+
+The build is decomposed into _add_* helpers that each attach one group of
+intermediate columns. They MUST run in the order build_game_state_matrix
+calls them: later steps consume earlier columns (legal_balls_before feeds
+the run rate, wicket window, partnership, batter/bowler, and chase-state
+steps), and every step assumes the clean RangeIndex established by the
+initial sort/reset (re-established by the merge in _add_last_over_runs).
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
+from src.features import phase_vec
+
 GAME_STATE_DIM = 24
 
 
-def build_game_state_matrix(df: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]:
-    """
-    Compute the (N_balls, 24) game-state matrix for every ball in df
-    (project_gagan's cleaned Ball-by-Ball dataframe, one row per delivery).
-
-    Returns the feature matrix plus the input df with the intermediate
-    per-ball columns attached (useful for building the win/next-ball/score
-    labels alongside the features).
-    """
-    d = df.sort_values(["match_id", "innings", "over", "ball"]).reset_index(drop=True).copy()
-
+def _add_legal_ball_state(d: pd.DataFrame) -> pd.DataFrame:
+    """Legal-ball accounting plus pre-ball score/wickets/run-rate state."""
     # NOTE: hrishav's original convention (Cricsheet data) treats no-balls as
     # legal ("over still advances") and only excludes wides. gagan's own
     # ipl_data.xlsx uses a DIFFERENT convention: team_balls excludes both
@@ -63,13 +66,17 @@ def build_game_state_matrix(df: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]
     # -- keeps legal_balls_total consistent with team_balls/team_wicket/
     # crr/rrr as used elsewhere in this merged pipeline (src/pipeline.py).
     d["is_legal"] = (d["extras_wides"] == 0) & (d["extras_noballs"] == 0)
-    d["phase"] = (d["over"] > 6).astype(int) + (d["over"] > 15).astype(int)
+    d["phase"] = phase_vec(d["over"])
 
     grp_inn = d.groupby(["match_id", "innings"])
 
     # legal_balls_total is a POSITION counter (balls bowled so far, including
     # this one) -- deliberately matching gagan's own team_balls semantics
     # (see the is_legal comment above), so it can be compared 1:1 against it.
+    # DEF-005: legal_balls_total is kept ONLY as a validation column (tests
+    # cross-check it against team_balls); the feature matrix uses
+    # legal_balls_before, because a pre-ball state must not know whether the
+    # imminent delivery will be legal.
     # legal_balls_before is the "before this ball" count, used everywhere a
     # ratio needs to pair with score_before/wickets_before (both "before this
     # ball") without mixing a pre-ball numerator against a ball-inclusive
@@ -81,9 +88,12 @@ def build_game_state_matrix(df: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]
     d["score_before"] = grp_inn["runs_total"].cumsum() - d["runs_total"]
     d["wickets_before"] = grp_inn["is_wicket"].cumsum() - d["is_wicket"]
     d["run_rate"] = d["score_before"] / d["legal_balls_before"].clip(lower=1) * 6
+    return d
 
-    # Runs in the last completed over: sum of runs_total in the previous over.
-    over_runs = d.groupby(["match_id", "innings", "over"])["runs_total"].transform("sum")
+
+def _add_last_over_runs(d: pd.DataFrame) -> pd.DataFrame:
+    """Runs in the last completed over: sum of runs_total in the previous over.
+    (The merge rebuilds the frame; row order and the RangeIndex are preserved.)"""
     prev_over_map = d.groupby(["match_id", "innings", "over"])["runs_total"].sum().groupby(
         level=[0, 1]).shift(1).fillna(0.0)
     d = d.merge(
@@ -91,23 +101,40 @@ def build_game_state_matrix(df: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]
         on=["match_id", "innings", "over"], how="left",
     )
     d["runs_last_over"] = d["runs_last_over"].fillna(0.0)
+    return d
 
-    # Wickets in the last 5 overs (rolling count over the last 30 legal balls).
-    d["wk_last_5_overs"] = (
-        grp_inn["is_wicket"]
-        .rolling(window=30, min_periods=1)
-        .sum()
-        .reset_index(level=[0, 1], drop=True)
-    ) - d["is_wicket"]
 
-    # Partnership: cumulative runs/balls since the last wicket in this innings.
-    wicket_group_id = grp_inn["is_wicket"].cumsum().shift(1).fillna(0)
+def _add_wicket_window(d: pd.DataFrame) -> pd.DataFrame:
+    """Wickets in the last 5 overs = wickets that fell during the span of the
+    last 30 LEGAL balls before this one (DEF-006: a fixed 30-ROW window
+    would shrink below five overs whenever the span contains wides or
+    no-balls). legal_balls_before is non-decreasing within an innings, so
+    searchsorted finds the first row of the 30-legal-ball span directly.
+    (d has a fresh RangeIndex -- see the sort/reset at the top of
+    build_game_state_matrix -- so group index values are positional.)"""
+    wk_window = np.zeros(len(d))
+    for _, grp in d.groupby(["match_id", "innings"]):
+        lb = grp["legal_balls_before"].to_numpy()
+        wk = grp["wickets_before"].to_numpy()
+        span_start = np.searchsorted(lb, lb - 30, side="left")
+        wk_window[grp.index.to_numpy()] = wk - wk[span_start]
+    d["wk_last_5_overs"] = wk_window
+    return d
+
+
+def _add_partnership_state(d: pd.DataFrame) -> pd.DataFrame:
+    """Partnership: cumulative runs/balls since the last wicket in this innings."""
+    wicket_group_id = d.groupby(["match_id", "innings"])["is_wicket"].cumsum().shift(1).fillna(0)
     d["_partnership_grp"] = wicket_group_id
     part_grp = d.groupby(["match_id", "innings", "_partnership_grp"])
     d["partnership_runs"] = part_grp["runs_total"].cumsum() - d["runs_total"]
     d["partnership_balls"] = part_grp["is_legal"].cumsum() - d["is_legal"].astype(int)
+    return d
 
-    # In-innings batter strike rate / balls faced so far (before this ball).
+
+def _add_batter_bowler_state(d: pd.DataFrame) -> pd.DataFrame:
+    """In-innings batter strike rate/balls and bowler economy/wickets, all
+    'before this ball'."""
     bat_grp = d.groupby(["match_id", "innings", "batter"])
     bat_runs_before = bat_grp["runs_batter"].cumsum() - d["runs_batter"]
     bat_legal_before = bat_grp["is_legal"].cumsum() - d["is_legal"].astype(int)
@@ -115,7 +142,6 @@ def build_game_state_matrix(df: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]
     d["batter_sr_innings"] = (bat_runs_before / bat_legal_before.clip(lower=1) * 100).where(
         bat_legal_before > 0, 0.0)
 
-    # In-innings bowler economy / wickets so far (before this ball).
     bowl_grp = d.groupby(["match_id", "innings", "bowler"])
     bowl_runs_before = bowl_grp["runs_total"].cumsum() - d["runs_total"]
     bowl_legal_before = bowl_grp["is_legal"].cumsum() - d["is_legal"].astype(int)
@@ -123,17 +149,24 @@ def build_game_state_matrix(df: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]
     d["bowler_wkts_innings"] = bowl_wkts_before
     d["bowler_econ_innings"] = (bowl_runs_before / bowl_legal_before.clip(lower=1) * 6).where(
         bowl_legal_before > 0, 0.0)
+    return d
 
-    # Boundaries/dots so far this innings (before this ball).
+
+def _add_boundary_dot_state(d: pd.DataFrame) -> pd.DataFrame:
+    """Boundaries/dots so far this innings (before this ball)."""
     d["_is_boundary"] = d["runs_batter"].isin([4, 6]).astype(int)
     d["_is_dot"] = ((d["runs_batter"] == 0) & (d["runs_extras"] == 0)).astype(int)
-    grp_inn2 = d.groupby(["match_id", "innings"])
-    d["boundaries_before"] = grp_inn2["_is_boundary"].cumsum() - d["_is_boundary"]
-    d["dots_before"] = grp_inn2["_is_dot"].cumsum() - d["_is_dot"]
+    grp_inn = d.groupby(["match_id", "innings"])
+    d["boundaries_before"] = grp_inn["_is_boundary"].cumsum() - d["_is_boundary"]
+    d["dots_before"] = grp_inn["_is_dot"].cumsum() - d["_is_dot"]
+    return d
 
-    # 2nd-innings chase state (0 for innings 1). balls_remaining uses
-    # legal_balls_before for the same reason run_rate does above: it must
-    # pair with runs_required, which is computed from score_before.
+
+def _add_chase_state(d: pd.DataFrame) -> pd.DataFrame:
+    """2nd-innings chase state (0 for innings 1) plus the toss flag.
+    balls_remaining uses legal_balls_before for the same reason run_rate
+    does in _add_legal_ball_state: it must pair with runs_required, which
+    is computed from score_before."""
     inn2 = d["innings"] == 2
     d["runs_required"] = np.where(inn2, (d["runs_target"] - d["score_before"]).clip(lower=0), 0.0)
     d["balls_remaining"] = np.where(inn2, (120 - d["legal_balls_before"]).clip(lower=1), 0.0)
@@ -141,14 +174,18 @@ def build_game_state_matrix(df: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]
 
     # Toss: did the toss winner choose to bat (match-level, broadcast per ball).
     d["toss_won_bat"] = (d["toss_decision"] == "bat").astype(float)
+    return d
 
+
+def _assemble_matrix(d: pd.DataFrame) -> np.ndarray:
+    """Stack the intermediate columns into the (N, 24) feature matrix."""
     lb = d["legal_balls_before"].clip(lower=1)
-    inn2_f = inn2.astype(float)
+    inn2_f = (d["innings"] == 2).astype(float)
     phase = d["phase"]
 
     X = np.stack([
         d["over"] / 20.0,
-        d["legal_balls_total"] / 120.0,
+        d["legal_balls_before"] / 120.0,
         inn2_f,
         (phase == 0).astype(float),
         (phase == 1).astype(float),
@@ -174,4 +211,29 @@ def build_game_state_matrix(df: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]
     ], axis=1).astype(np.float32)
 
     assert X.shape[1] == GAME_STATE_DIM
-    return X, d
+    return X
+
+
+def build_game_state_matrix(df: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]:
+    """
+    Compute the (N_balls, 24) game-state matrix for every ball in df
+    (project_gagan's cleaned Ball-by-Ball dataframe, one row per delivery).
+
+    Returns the feature matrix plus the input df with the intermediate
+    per-ball columns attached (useful for building the win/next-ball/score
+    labels alongside the features).
+
+    Each _add_* step attaches one group of columns; see the module
+    docstring for why their order is load-bearing.
+    """
+    d = df.sort_values(["match_id", "innings", "over", "ball"]).reset_index(drop=True).copy()
+
+    d = _add_legal_ball_state(d)
+    d = _add_last_over_runs(d)
+    d = _add_wicket_window(d)
+    d = _add_partnership_state(d)
+    d = _add_batter_bowler_state(d)
+    d = _add_boundary_dot_state(d)
+    d = _add_chase_state(d)
+
+    return _assemble_matrix(d), d

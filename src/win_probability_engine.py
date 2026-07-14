@@ -67,6 +67,51 @@ class WinProbabilityEngine:
         self.model = model.to(device)
         self.mc_samples = mc_samples
         self.device = device
+        # Populated by from_checkpoint(): player registry, embed seed, year
+        # splits, feature layout. Empty for engines built around an
+        # in-memory model.
+        self.metadata: dict = {}
+
+    @classmethod
+    def from_checkpoint(cls, path: str, mc_samples: int = MC_SAMPLES,
+                        device: str = "cpu") -> "WinProbabilityEngine":
+        """
+        DEF-010: build an engine from the checkpoint written by
+        run_alt_transformer.py (models/alt_transformer.pt), which persists
+        the trained weights plus the metadata (player registry, embed seed,
+        year splits, feature layout) needed to rebuild identical inputs.
+
+        VF-004: the metadata is retained on the engine (self.metadata) and
+        used by features_from_deliveries(), so raw delivery rows can be
+        turned into predictions without re-deriving the feature pipeline.
+        """
+        ckpt = torch.load(path, map_location=device, weights_only=True)
+        model = IPLTransformer()
+        model.load_state_dict(ckpt["state_dict"])
+        engine = cls(model, mc_samples=mc_samples, device=device)
+        engine.metadata = {k: v for k, v in ckpt.items() if k != "state_dict"}
+        return engine
+
+    def features_from_deliveries(self, df) -> dict:
+        """
+        VF-004: rebuild the exact training-time feature pipeline from the
+        checkpoint metadata and apply it to raw delivery rows (project
+        ball-by-ball schema). Returns {(match_id, innings): (T, 120) array},
+        each directly consumable by predict()/predict_match()/update().
+
+        Requires an engine built via from_checkpoint() -- the player
+        registry and embedding seed come from the checkpoint, so the
+        reconstructed embeddings are bit-identical to training.
+        """
+        if not self.metadata.get("player_registry"):
+            raise ValueError(
+                "features_from_deliveries needs checkpoint metadata "
+                "(player_registry, embed_seed) -- build this engine with "
+                "WinProbabilityEngine.from_checkpoint()")
+        from src.alt_transformer_data import build_embedding_lookup, build_features_for_innings
+        lookup = build_embedding_lookup(
+            self.metadata["player_registry"], seed=self.metadata["embed_seed"])
+        return build_features_for_innings(df, lookup)
 
     def predict(self, features: np.ndarray) -> WinProbResult:
         """

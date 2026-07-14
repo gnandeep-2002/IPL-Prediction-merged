@@ -9,9 +9,13 @@ Cricsheet's column schema to project_gagan's ipl_data.xlsx ball-by-ball
 schema (per the approved decision: keep gagan's xlsx loader only, adapt
 hrishav's player-level feature computation to run on it).
 
-This is an ADDITIVE, optional feature set -- it does not replace or feed
-into src/pipeline.py's team-level Elo/form/H2H features unless a specific
-model is built to use both (per the approved decision).
+STATUS (DEF-010): this is an ADDITIVE, optional feature set -- it is NOT
+consumed by run_all.py's default pipeline or by the alternative
+Transformer (which uses learned player embeddings instead). It is kept as
+a tested reference implementation for future integration work (see the
+defect report's improvement priority 6: add player availability/rolling
+form only after the evaluation protocol is reliable). If it is still
+unconsumed once that work lands, archive or remove it.
 
 Column mapping vs. the original (Cricsheet -> ipl_data.xlsx):
     batter_runs   -> runs_batter
@@ -30,13 +34,15 @@ from __future__ import annotations
 
 import pandas as pd
 
+from src.features import phase_vec
+
 BOWLER_WICKET_KINDS = {"caught", "bowled", "lbw", "stumped", "caught and bowled", "hit wicket"}
 
 
 def _add_helper_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["is_wide"] = df["extras_wides"] > 0
-    df["phase"] = (df["over"] > 6).astype(int) + (df["over"] > 15).astype(int)
+    df["phase"] = phase_vec(df["over"])
     return df
 
 
@@ -48,13 +54,16 @@ def compute_rolling_player_stats(df: pd.DataFrame) -> dict[int, dict[str, dict]]
     year has all-zero features (no history available).
     """
     df = _add_helper_columns(df)
-    years_sorted = sorted(df["year"].unique())
     season_stats: dict[int, dict] = {}
-    cumulative = pd.DataFrame()
 
-    for year in years_sorted:
-        season_stats[year] = {} if cumulative.empty else _aggregate_player_stats(cumulative)
-        cumulative = pd.concat([cumulative, df[df["year"] == year]], ignore_index=True)
+    # Walk-forward: year Y sees exactly the balls from seasons < Y. A direct
+    # filter states that invariant explicitly and avoids the old quadratic
+    # rebuild (pd.concat of an ever-growing frame inside the loop); the
+    # aggregations are all order-insensitive groupby sums/counts, so the
+    # results are identical.
+    for year in sorted(df["year"].unique()):
+        history = df[df["year"] < year]
+        season_stats[year] = {} if history.empty else _aggregate_player_stats(history)
 
     return season_stats
 
@@ -149,13 +158,13 @@ def compute_matchup_features(df: pd.DataFrame) -> dict[int, dict[tuple, dict]]:
     Returns {year: {(batter, bowler): {balls, runs, dismissals, boundary_rt, dot_rt, matchup_sr}}}
     """
     df = _add_helper_columns(df)
-    years_sorted = sorted(df["year"].unique())
     matchup_stats: dict[int, dict] = {}
-    cumulative = pd.DataFrame()
 
-    for year in years_sorted:
-        matchup_stats[year] = {} if cumulative.empty else _aggregate_matchup(cumulative)
-        cumulative = pd.concat([cumulative, df[df["year"] == year]], ignore_index=True)
+    # Same walk-forward-by-filter pattern as compute_rolling_player_stats:
+    # "history strictly before year Y", stated directly, no quadratic concat.
+    for year in sorted(df["year"].unique()):
+        history = df[df["year"] < year]
+        matchup_stats[year] = {} if history.empty else _aggregate_matchup(history)
 
     return matchup_stats
 

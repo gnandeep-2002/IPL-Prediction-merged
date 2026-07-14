@@ -28,7 +28,10 @@ def calibration_bins(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10) -
     bins = np.linspace(0, 1, n_bins + 1)
     out = []
     for lo, hi in zip(bins[:-1], bins[1:]):
-        m = (y_prob >= lo) & (y_prob < hi)
+        # last bin is closed on both ends so y_prob == 1.0 (isotonic
+        # calibration saturates there) lands in a bin instead of being
+        # silently dropped from both calibration_bins() and ece()'s weights.
+        m = (y_prob >= lo) & (y_prob <= hi if hi >= 1.0 else y_prob < hi)
         if m.sum() == 0:
             continue
         out.append({

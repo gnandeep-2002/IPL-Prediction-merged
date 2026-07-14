@@ -1,0 +1,136 @@
+==============================================================================
+IPL Win-Probability & Score Prediction -- run_all.py
+Run: 2026-07-14 20:11:36    Matches: 1,146    Deliveries: 273,503
+==============================================================================
+
+---------- 1. PRE-MATCH MODEL (internal: train <=2020, test >2020) -----------
+  Climatology          Brier=0.2508  AUC=0.5000
+  Cal. LR              Brier=0.2641  AUC=0.4408  Acc=0.4640  BSS=-0.0533  ECE=0.1183
+  Cal. GBT             Brier=0.2563  AUC=0.4667  Acc=0.4986  BSS=-0.0220  ECE=0.0568
+
+---------------- 2. DYNAMIC 2ND/1ST-INNINGS MODELS (internal) ----------------
+  Dynamic 2nd          Brier=0.1450  AUC=0.8771  Acc=0.7912  ECE=0.0413
+  Dynamic 1st          Brier=0.2204  AUC=0.7012  Acc=0.6389
+
+----------------- 3. PHASE-SPECIFIC EVALUATION (2nd innings) -----------------
+  Powerplay (0-6 ov)   AUC=0.8197  Brier=0.1786  n=15098
+  Middle (6-15 ov)     AUC=0.8849  Brier=0.1393  n=18889
+  Death (15-20 ov)     AUC=0.9532  Brier=0.0844  n=6383
+
+ 4. SCORE REGRESSION ZOO (fixed horizons; saved to models/ipl_score_pipeline.pkl) 
+  pre_match:
+    Linear           MAE=30.8  RMSE=39.0  R2=-0.214  n=347
+    Random Forest    MAE=32.3  RMSE=40.4  R2=-0.303  n=347
+    Gradient BT      MAE=32.7  RMSE=40.9  R2=-0.340  n=347
+    XGBoost          MAE=32.7  RMSE=40.7  R2=-0.323  n=347
+    SVR              MAE=32.9  RMSE=41.5  R2=-0.376  n=347
+  inn1 @5ov:
+    Linear           MAE=24.5  RMSE=30.6  R2=0.252  n=347
+    Random Forest    MAE=24.8  RMSE=31.5  R2=0.208  n=347
+    Gradient BT      MAE=26.0  RMSE=32.5  R2=0.154  n=347
+    XGBoost          MAE=26.4  RMSE=33.2  R2=0.117  n=347
+    SVR              MAE=24.0  RMSE=30.1  R2=0.276  n=347
+  inn1 @10ov:
+    Linear           MAE=19.3  RMSE=23.9  R2=0.542  n=347
+    Random Forest    MAE=20.7  RMSE=27.5  R2=0.396  n=347
+    Gradient BT      MAE=19.7  RMSE=25.1  R2=0.496  n=347
+    XGBoost          MAE=20.0  RMSE=26.0  R2=0.460  n=347
+    SVR              MAE=19.4  RMSE=24.1  R2=0.537  n=347
+  inn1 @15ov:
+    Linear           MAE=12.2  RMSE=15.7  R2=0.799  n=345
+    Random Forest    MAE=12.3  RMSE=16.7  R2=0.772  n=345
+    Gradient BT      MAE=13.1  RMSE=17.4  R2=0.752  n=345
+    XGBoost          MAE=12.8  RMSE=17.2  R2=0.758  n=345
+    SVR              MAE=12.1  RMSE=15.5  R2=0.802  n=345
+  inn1 @18ov:
+    Linear           MAE=8.4  RMSE=10.8  R2=0.897  n=338
+    Random Forest    MAE=8.4  RMSE=11.6  R2=0.880  n=338
+    Gradient BT      MAE=9.3  RMSE=13.1  R2=0.847  n=338
+    XGBoost          MAE=9.4  RMSE=13.1  R2=0.847  n=338
+    SVR              MAE=7.7  RMSE=9.9  R2=0.912  n=338
+  inn2 @5ov:
+    Linear           MAE=17.6  RMSE=21.5  R2=0.563  n=347
+    Random Forest    MAE=16.5  RMSE=22.7  R2=0.514  n=347
+    Gradient BT      MAE=16.3  RMSE=22.4  R2=0.527  n=347
+    XGBoost          MAE=16.4  RMSE=22.2  R2=0.537  n=347
+    SVR              MAE=14.6  RMSE=19.8  R2=0.630  n=347
+  inn2 @10ov:
+    Linear           MAE=17.5  RMSE=21.8  R2=0.534  n=343
+    Random Forest    MAE=13.5  RMSE=18.3  R2=0.670  n=343
+    Gradient BT      MAE=12.9  RMSE=17.6  R2=0.696  n=343
+    XGBoost          MAE=13.2  RMSE=17.9  R2=0.683  n=343
+    SVR              MAE=15.1  RMSE=19.9  R2=0.610  n=343
+  inn2 @15ov:
+    Linear           MAE=19.9  RMSE=25.0  R2=0.297  n=326
+    Random Forest    MAE=10.3  RMSE=14.2  R2=0.774  n=326
+    Gradient BT      MAE=9.8  RMSE=13.2  R2=0.803  n=326
+    XGBoost          MAE=9.3  RMSE=12.8  R2=0.817  n=326
+    SVR              MAE=18.0  RMSE=22.6  R2=0.426  n=326
+  inn2 @18ov:
+    Linear           MAE=23.6  RMSE=29.5  R2=-0.005  n=266
+    Random Forest    MAE=8.2  RMSE=11.7  R2=0.842  n=266
+    Gradient BT      MAE=7.4  RMSE=10.4  R2=0.874  n=266
+    XGBoost          MAE=7.2  RMSE=10.0  R2=0.885  n=266
+    SVR              MAE=21.5  RMSE=26.5  R2=0.189  n=266
+    note: innings-stage metrics are reported at the predeclared
+          5/10/15/18-over horizons only (one snapshot per innings, DEF-002) --
+          aggregate all-delivery metrics were dominated by trivially-easy
+          late-innings states and are no longer reported.
+    note: pre-match score R2 is expected to be negative (worse than predicting
+          the mean) -- this mirrors project_gagan's own finding and is not a
+          bug. See docs/known_limitations.md.
+
+------- 5. EXTERNAL 2026 HOLDOUT EVALUATION (locked, never used above) -------
+  Retraining pre-match model on full 2008-2025 data first...
+    note: label correction applied (data/external_2026/label_corrections.csv):
+          match 12 match_winner: None -> 'PBKS'. Source: Inherited from the
+          original pipeline's correction (project_gagan, cell 53), which
+          pinned the winner to the bowl-first side; previously hard-coded in
+          evaluate_2026_pre_match (DEF-003).
+  Pre-match accuracy: 63.5%  (47/74)
+  95% CI (Clopper-Pearson): [51.5%, 74.4%]
+  p-value vs 50/50 (exact binomial): 0.027
+  Naive majority-class baseline (always pick the bowl-first side): 63.5%
+  p-value vs naive baseline (exact McNemar, 1/1 discordant): 1.000
+    note: significance against 50/50 does not establish improvement over the
+          naive majority baseline (DEF-009) -- the McNemar line above is the
+          relevant comparison. Pre-match AUC is ~0.51 on internal LOSO (near-
+          random); the 2026 accuracy figure may reflect variance over 74
+          matches rather than genuine model skill. See
+          docs/known_limitations.md.
+
+------------- 6. SHAP EXPLAINABILITY (pre-match Cal. GBT model) --------------
+  elo_diff           mean|SHAP|=0.0289
+  h2h                mean|SHAP|=0.0108
+  form_diff          mean|SHAP|=0.0105
+  toss_bat_first     mean|SHAP|=0.0006
+  toss_field_first   mean|SHAP|=0.0006
+
+----- 7. 2026 TOURNAMENT SIMULATION (actual vs. predicted points table) ------
+  Actual table topper   : Royal Challengers Bengaluru
+  Predicted table topper: Royal Challengers Bengaluru  (CORRECT)
+  Top-4 overlap: 3/4  ['Gujarat Titans', 'Punjab Kings', 'Royal Challengers Bengaluru']
+
+--- 8. CALIBRATION RELIABILITY (pre-match Cal. GBT + dynamic 2nd-innings) ----
+  Pre-match Cal. GBT: 5 populated bins (see dashboard for the reliability diagram)
+  Dynamic 2nd innings: 10 populated bins (see dashboard for the reliability diagram)
+
+-------------------- 9. TEAM ELO TRAJECTORIES (2008-2025) --------------------
+  Computed Elo history for 15 teams (2292 match-level data points total)
+
+--- 10. TEMPERATURE SCALING vs. ISOTONIC CALIBRATION (dynamic 2nd innings) ---
+  Temperature-scaled (T=1.0639): Brier 0.1457->0.1453  AUC 0.8772->0.8772  ECE 0.0457->0.045
+  Isotonic (default):              Brier 0.145  AUC 0.8771  ECE 0.0415
+    note: both methods start from the same uncalibrated LogisticRegression;
+          isotonic is this pipeline's default (see src/models.py) --
+          temperature scaling is shown for comparison only, not as a
+          replacement.
+  
+  Dashboard sections updated : calibration_comparison, dyn2_reliability, dynamic, elo_history, external_2026, overview, phases, pre_match, pre_match_reliability, score_regression, shap, tournament
+  Dashboard sections retained: dyn2_calculator, horizons, notable_matches, score_scatter, single_match_horizons, trajectories
+  Dashboard data artifact    : reports/dashboard_data.json
+
+==============================================================================
+Dashboard written to dashboard/index.html
+Report saved to reports/run_summary.txt
+Done.
