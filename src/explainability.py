@@ -15,7 +15,7 @@ SEED = 42
 
 def shap_importance(model, X_background: np.ndarray, X_explain: np.ndarray,
                      feature_names: list[str], n_background: int = 80,
-                     n_explain: int = 80) -> dict:
+                     n_explain: int = 80, silent: bool = True) -> dict:
     """
     Compute mean |SHAP value| per feature for a calibrated classifier's
     positive-class probability.
@@ -26,6 +26,8 @@ def shap_importance(model, X_background: np.ndarray, X_explain: np.ndarray,
     X_background : array used to build the permutation background distribution
     X_explain : array of samples to explain
     feature_names : names matching the columns of X_background/X_explain
+    silent : suppress SHAP's per-sample progress bar (cosmetic only, does
+        not affect the computed values)
 
     Returns
     -------
@@ -39,9 +41,11 @@ def shap_importance(model, X_background: np.ndarray, X_explain: np.ndarray,
     def _prob(X):
         return model.predict_proba(X)[:, 1]
 
-    explainer = shap.Explainer(_prob, bg, algorithm="permutation")
+    # seed pins the permutation order -- the background sample alone being
+    # seeded (above) is not enough for run-to-run reproducible SHAP values.
+    explainer = shap.Explainer(_prob, bg, algorithm="permutation", seed=SEED)
     n = min(n_explain, len(X_explain))
-    values = explainer(X_explain[:n]).values
+    values = explainer(X_explain[:n], silent=silent).values
 
     mean_abs = np.abs(values).mean(axis=0)
     importance = dict(

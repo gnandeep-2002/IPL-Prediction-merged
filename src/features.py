@@ -45,6 +45,12 @@ def phase(over: int) -> int:
     return int(over > 6) + int(over > 15)
 
 
+def phase_vec(over_col: pd.Series) -> pd.Series:
+    """Vectorised twin of phase() for a pandas column -- same rule, applied
+    over a whole 'over' column at once instead of one row at a time."""
+    return (over_col > 6).astype(int) + (over_col > 15).astype(int)
+
+
 def get_enc(enc_map: dict, global_mean: float, name: str) -> float:
     """Target-encoding lookup with fallback to global mean for unseen values."""
     return enc_map.get(name, global_mean)

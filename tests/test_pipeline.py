@@ -68,11 +68,12 @@ class TestCompareCalibrationMethodsDyn2:
 
     def test_uses_only_dyn2_feature_columns(self):
         """Sanity check: the function must not require any columns beyond
-        DYN2 + year + chasing_wins (no accidental dependency on columns
-        that only exist in the real pipeline's dataframe, e.g. match_id
-        beyond what's already provided)."""
+        DYN2 + year + chasing_wins + match_id. match_id became a REQUIRED
+        column with the DEF-001 fix: calibration folds are grouped by match
+        so one match's deliveries are never split across the base-model and
+        calibration partitions."""
         df2 = _make_df2()
-        required = set(DYN2) | {"year", "chasing_wins"}
+        required = set(DYN2) | {"year", "chasing_wins", "match_id"}
         assert required.issubset(df2.columns)
         # Should not raise even if we drop everything else.
         minimal = df2[list(required)]

@@ -1,0 +1,2 @@
+match_id,column,value,reason,source
+12,match_winner,PBKS,"Source row has an empty match_winner (KKR vs PBKS, Eden Gardens, April 06 2026). The bowl-first side (PBKS) is recorded as the winner, consistent with the row's bat_first_won=0. The in-repo in-game data for this match is truncated at 3.4 overs of innings 1, so the result cannot be re-derived from repository data.","Inherited from the original pipeline's correction (project_gagan, cell 53), which pinned the winner to the bowl-first side; previously hard-coded in evaluate_2026_pre_match (DEF-003)."

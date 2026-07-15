@@ -10,6 +10,16 @@ from __future__ import annotations
 import pandas as pd
 
 
+def _update(elo: dict[str, float], t1: str, t2: str, team1_win: int, K: int, init: int) -> tuple[float, float]:
+    """Apply one match's Elo update in place; return each team's pre-match rating."""
+    e1 = elo.get(t1, float(init))
+    e2 = elo.get(t2, float(init))
+    exp1 = 1.0 / (1.0 + 10.0 ** ((e2 - e1) / 400.0))
+    elo[t1] = e1 + K * (team1_win - exp1)
+    elo[t2] = e2 + K * ((1 - team1_win) - (1 - exp1))
+    return e1, e2
+
+
 def compute_elo(
     match_df: pd.DataFrame,
     K: int = 32,
@@ -18,7 +28,10 @@ def compute_elo(
     """
     Compute pre-match Elo ratings for every row in match_df.
 
-    match_df must be sorted chronologically before calling (by match_id or date).
+    match_df must be sorted chronologically before calling — by parsed match
+    date (with match_id as a tie-break), NOT by match_id alone: Cricsheet-style
+    match IDs are not in date order (DEF-007). src/pipeline.py's
+    load_and_prepare() does this sort.
     Each team starts at `init`; ratings are updated using the standard
     Elo update rule after each match.
 
@@ -37,14 +50,9 @@ def compute_elo(
 
     for _, row in match_df.iterrows():
         t1, t2 = row["team1"], row["team2"]
-        e1 = elo.get(t1, float(init))
-        e2 = elo.get(t2, float(init))
-        exp1 = 1.0 / (1.0 + 10.0 ** ((e2 - e1) / 400.0))
+        e1, e2 = _update(elo, t1, t2, row["team1_win"], K, init)
         elo1_list.append(e1)
         elo2_list.append(e2)
-        outcome = row["team1_win"]
-        elo[t1] = e1 + K * (outcome - exp1)
-        elo[t2] = e2 + K * ((1 - outcome) - (1 - exp1))
 
     out = match_df.copy()
     out["elo1"] = elo1_list
@@ -64,10 +72,11 @@ def compute_elo_history(
     time rather than just using it as a single pre-match feature.
 
     match_df must already have normalised team names (src/data.py's
-    NAME_MAP is applied upstream in load_ball_by_ball(), before a raw
-    franchise name like "Deccan Chargers" ever reaches this function) --
-    otherwise a defunct franchise's history would incorrectly appear as a
-    separate team from its successor instead of one continuous trajectory.
+    NAME_MAP is applied upstream in load_ball_by_ball()) -- otherwise a
+    renamed franchise (e.g. Delhi Daredevils/Delhi Capitals) would
+    incorrectly appear as two separate trajectories. Distinct franchises
+    that merely shared a city (Deccan Chargers vs. Sunrisers Hyderabad)
+    are deliberately kept as separate teams (DEF-008).
 
     Returns
     -------
@@ -82,12 +91,7 @@ def compute_elo_history(
 
     for _, row in match_df.iterrows():
         t1, t2 = row["team1"], row["team2"]
-        e1 = elo.get(t1, float(init))
-        e2 = elo.get(t2, float(init))
-        exp1 = 1.0 / (1.0 + 10.0 ** ((e2 - e1) / 400.0))
-        outcome = row["team1_win"]
-        elo[t1] = e1 + K * (outcome - exp1)
-        elo[t2] = e2 + K * ((1 - outcome) - (1 - exp1))
+        _update(elo, t1, t2, row["team1_win"], K, init)
 
         for team in (t1, t2):
             history.setdefault(team, []).append({

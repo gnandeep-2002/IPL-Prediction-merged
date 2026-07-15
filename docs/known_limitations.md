@@ -4,6 +4,15 @@ Honest caveats carried forward from `COMPARISON_REPORT.md` and
 `DEEP_COMPARISON.md`, plus new limitations introduced by the merge itself.
 Read this before quoting any number from this project.
 
+> **Numbers changed after the defect-report fixes.** The fixes recorded in
+> `defect report/DEFECT_REPORT.md` deliberately changed reported metrics:
+> matches are now processed in true date order rather than match_id order
+> (DEF-007 — 59 matches were previously out of order), Deccan Chargers and
+> Sunrisers Hyderabad are separate teams (DEF-008), calibration folds are
+> match-grouped (DEF-001), and score regression is reported at fixed
+> 5/10/15/18-over horizons instead of over all deliveries (DEF-002). Do not
+> compare post-fix numbers against pre-fix ones without noting this.
+
 ## Carried forward from project_gagan
 
 - **Pre-match win prediction is barely better than chance.** Internal

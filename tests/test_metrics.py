@@ -170,3 +170,16 @@ class TestCalibrationBins:
         y_true = np.array([])
         y_prob = np.array([])
         assert calibration_bins(y_true, y_prob) == []
+
+    def test_prob_exactly_one_lands_in_last_bin_not_dropped(self):
+        """Regression: isotonic calibration can saturate to exactly 1.0.
+        Those samples must land in the last bin, not vanish from both the
+        bin counts and ece()'s weighting (np.linspace's last bin edge is
+        exactly 1.0, and the binning mask used to be exclusive on both
+        sides at that boundary)."""
+        y_true = np.array([1, 1, 0])
+        y_prob = np.array([1.0, 1.0, 0.05])
+        bins = calibration_bins(y_true, y_prob, n_bins=10)
+        assert sum(b["count"] for b in bins) == 3
+        last_bin = [b for b in bins if b["pred_mean"] == pytest.approx(1.0)]
+        assert len(last_bin) == 1 and last_bin[0]["count"] == 2

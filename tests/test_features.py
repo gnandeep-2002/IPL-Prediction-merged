@@ -28,12 +28,15 @@ def test_name_map_known():
 
 
 def test_name_map_deccan_chargers():
-    """DEF-L01: Deccan Chargers (defunct 2012) must map to Sunrisers Hyderabad."""
-    assert normalise("Deccan Chargers") == "Sunrisers Hyderabad"
+    """DEF-008 (supersedes DEF-L01): Deccan Chargers must NOT map to
+    Sunrisers Hyderabad -- they are distinct franchises (Deccan folded after
+    2012; SRH entered 2013 as a new franchise), so each keeps its own
+    Elo/form/H2H history."""
+    assert normalise("Deccan Chargers") == "Deccan Chargers"
 
 
 def test_name_map_pune_warriors():
-    """DEF-L01: Pune Warriors (defunct 2013) must map to itself (no successor)."""
+    """Pune Warriors (defunct 2013) must map to itself (no successor)."""
     assert normalise("Pune Warriors") == "Pune Warriors"
 
 

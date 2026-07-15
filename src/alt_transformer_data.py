@@ -36,9 +36,52 @@ def build_embedding_lookup(registry: dict[str, int], seed: int = SEED) -> dict[s
 
 
 def _encode_next_ball(row) -> int:
+    """
+    Class label for the outcome of THIS delivery row (0/1/2/3/4/6/W).
+
+    DEF-004: the label intentionally comes from the same row as the input
+    state. The game-state features at position t are strictly pre-ball
+    (score_before/wickets_before/legal_balls_before...), so the imminent
+    delivery -- the "next ball" the head is documented to predict -- is
+    delivery t itself. No one-ball shift is needed or wanted; see the
+    src/transformer_model.py module docstring.
+    """
     if row["is_wicket"] == 1:
         return 6
     return NEXT_BALL_MAP.get(int(row["runs_batter"]), 0)
+
+
+def _stack_features(d: pd.DataFrame, game_state: np.ndarray,
+                    embed_lookup: dict[str, np.ndarray]) -> np.ndarray:
+    """Game state + batter/bowler/non-striker embeddings -> (N, 120) matrix.
+    Unknown players get a zero embedding (same convention as training)."""
+    zero = next(iter(embed_lookup.values())) * 0
+    bat_emb = np.stack([embed_lookup.get(n, zero) for n in d["batter"]])
+    bowl_emb = np.stack([embed_lookup.get(n, zero) for n in d["bowler"]])
+    non_emb = np.stack([embed_lookup.get(n, zero) for n in d["non_striker"]])
+    features = np.concatenate([game_state, bat_emb, bowl_emb, non_emb], axis=1).astype(np.float32)
+    assert features.shape[1] == GAME_STATE_DIM + 3 * PLAYER_EMBED_DIM
+    return features
+
+
+def build_features_for_innings(
+    df: pd.DataFrame, embed_lookup: dict[str, np.ndarray],
+) -> dict[tuple, np.ndarray]:
+    """
+    VF-004: label-free twin of build_innings_sequences for INFERENCE -- turns
+    raw delivery rows into the exact (T, 120) feature sequences the model was
+    trained on, keyed by (match_id, innings). Used by
+    WinProbabilityEngine.features_from_deliveries so a persisted checkpoint
+    can be applied to real match data without re-deriving the feature
+    pipeline by hand.
+    """
+    game_state, d = build_game_state_matrix(df)
+    d = d.reset_index(drop=True)
+    features = _stack_features(d, game_state, embed_lookup)
+    return {
+        key: features[np.asarray(idx)]
+        for key, idx in d.groupby(["match_id", "innings"]).groups.items()
+    }
 
 
 def build_innings_sequences(
@@ -56,13 +99,7 @@ def build_innings_sequences(
 
     game_state, d = build_game_state_matrix(subset)
     d = d.reset_index(drop=True)
-
-    bat_emb = np.stack([embed_lookup.get(n, embed_lookup[next(iter(embed_lookup))] * 0) for n in d["batter"]])
-    bowl_emb = np.stack([embed_lookup.get(n, embed_lookup[next(iter(embed_lookup))] * 0) for n in d["bowler"]])
-    non_emb = np.stack([embed_lookup.get(n, embed_lookup[next(iter(embed_lookup))] * 0) for n in d["non_striker"]])
-
-    features = np.concatenate([game_state, bat_emb, bowl_emb, non_emb], axis=1).astype(np.float32)
-    assert features.shape[1] == GAME_STATE_DIM + 3 * PLAYER_EMBED_DIM
+    features = _stack_features(d, game_state, embed_lookup)
 
     d["nb_label"] = d.apply(_encode_next_ball, axis=1)
     final_scores = d.groupby(["match_id", "innings"])["runs_total"].transform("sum")

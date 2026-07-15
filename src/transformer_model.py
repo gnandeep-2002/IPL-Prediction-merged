@@ -20,8 +20,16 @@ multi-task training is still available by passing nonzero lambdas.
 
 At each ball position t the model predicts (jointly, multi-task):
   1. win_prob[t]      - P(batting team wins | balls 0..t)  [BCE loss]
-  2. next_ball[t]     - distribution over next-ball outcome [CE loss]
-                        classes: [0,1,2,3,4,6,W]
+  2. next_ball[t]     - distribution over the outcome of delivery t itself
+                        [CE loss], classes [0,1,2,3,4,6,W]. DEF-004: the
+                        game state at position t is strictly PRE-ball
+                        (src/game_state.py computes score_before,
+                        wickets_before, legal_balls_before, etc.), so
+                        delivery t IS the next ball to be bowled from the
+                        model's point of view -- the label is deliberately
+                        taken from the same delivery row
+                        (src/alt_transformer_data.py's _encode_next_ball),
+                        not shifted to t+1.
   3. score_proj[t]    - projected final innings total       [MSE loss]
 """
 from __future__ import annotations

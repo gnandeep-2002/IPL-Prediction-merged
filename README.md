@@ -27,7 +27,14 @@ This runs project_gagan's pipeline end-to-end: Elo/form/H2H feature
 engineering, the pre-match win-probability model, the dynamic 2nd/1st
 innings models, phase-specific evaluation, the score regression zoo, the
 locked-2026 external holdout evaluation, SHAP explainability, and the
-2026 tournament simulation. Run `pytest tests/` to verify (128 tests).
+2026 tournament simulation. Run `pytest tests/` to verify (172 tests).
+
+CI: the same suite runs on every push/PR via GitHub Actions
+(`.github/workflows/ci.yml`). Tests that need the uncommitted raw dataset
+self-skip in CI. (VF-001 in `defect report/DEFECT_REPORT.md` records an
+earlier confusion about where this workflow must live: GitHub only reads
+workflows from the repository root — which, in the published repo, is this
+directory.)
 
 **Why gagan as the default:** its dynamic (in-game) win-probability model
 has a verified AUC of 0.878 vs. hrishav's 0.807 on their respective test
@@ -67,8 +74,11 @@ available). Full detail in `docs/known_limitations.md`.
 ## Honest caveats -- read before quoting a number
 
 - **Pre-match win prediction is close to a coin flip** (LOSO AUC ~0.51).
-  The 2026 holdout's 64.9% accuracy beats the majority-class baseline by
-  only 1.4 points and may not reflect genuine skill over just 74 matches.
+  After the defect-report fixes (true date ordering, Deccan/SRH split --
+  see `defect report/DEFECT_REPORT.md`), the 2026 holdout accuracy is
+  63.5% (47/74): exactly EQUAL to the majority-class baseline (exact
+  McNemar p=1.0). It is significant only against a 50/50 coin flip, which
+  is not the relevant comparison.
 - **Pre-match score regression is worse than predicting the mean**
   (negative R² for every model). In-game score regression is much better.
 - **The alternative Transformer (`run_alt_transformer.py`) is not the
@@ -108,6 +118,7 @@ merged_project/
 ├── src/                          see "What came from where" above
 ├── tests/
 └── docs/
+    ├── evaluation_metrics.md          what every reported metric means & how to read it
     └── known_limitations.md
 ```
 

@@ -1,0 +1,31 @@
+# DEF-012: packaging manifest so the project is installable/reproducible
+# rather than a loose script collection. Dependency pins mirror
+# requirements.txt (the canonical pinned list).
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ipl-win-probability"
+version = "1.0.0"
+description = "IPL score & win-probability prediction (merged pipeline: calibrated LogReg/GBT default path + alternative ball-by-ball Transformer)"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy==2.0.2",
+    "pandas==2.3.3",
+    "scikit-learn==1.6.1",
+    "scipy==1.13.1",
+    "joblib==1.5.3",
+    "openpyxl==3.1.5",
+    "shap==0.49.1",
+    "torch==2.8.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest==8.4.2"]
+
+[tool.setuptools]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
