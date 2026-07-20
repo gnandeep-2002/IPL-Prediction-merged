@@ -113,9 +113,9 @@ def train_pre_match_internal(match_df: pd.DataFrame) -> dict:
 
     clim_extra = classification_metrics(y_te, p_clim)
     climatology = {"brier": brier_score_loss(y_te, p_clim), "auc": 0.5,
-                   "acc": float(y_te.mean()), "bss": 0.0, "ece": 0.0,
-                   **{k: clim_extra[k] for k in ("log_loss", "precision", "recall",
-                                                 "specificity", "fpr", "fnr",
+                   "bss": 0.0, "positive_rate": float(y_te.mean()),
+                   **{k: clim_extra[k] for k in ("acc", "ece", "log_loss", "precision",
+                                                 "recall", "specificity", "fpr", "fnr",
                                                  "f1", "confusion")}}
 
     return {
@@ -198,8 +198,7 @@ def phase_specific_eval(train2: pd.DataFrame, test2: pd.DataFrame, dsc2: Standar
         m_p.fit(dsc2.transform(tr_p[DYN2])[:, idxs], tr_p["chasing_wins"].values)
         pp = m_p.predict_proba(dsc2.transform(te_p[DYN2])[:, idxs])[:, 1]
         yp = te_p["chasing_wins"].values
-        results[pname] = {"brier": brier_score_loss(yp, pp), "auc": roc_auc_score(yp, pp),
-                          "log_loss": binary_log_loss(yp, pp), "n": len(yp)}
+        results[pname] = {**classification_metrics(yp, pp), "n": len(yp)}
     return results
 
 
@@ -304,6 +303,10 @@ def evaluate_2026_pre_match(match_df: pd.DataFrame, pre_model, sc_pre, pm26_path
     pm26 = pd.read_csv(pm26_path)
     corrections = apply_label_corrections(
         pm26, os.path.join(os.path.dirname(pm26_path), "label_corrections.csv"))
+    pm26["_sort_date"] = pd.to_datetime(pm26["date"], format="mixed")
+    if pm26["_sort_date"].isna().any():
+        bad = pm26.loc[pm26["_sort_date"].isna(), "match_id"].tolist()
+        raise ValueError(f"external dataset has unparseable dates for matches: {bad}")
     for col in ["team_bat_first", "team_bowl_first", "toss_winner", "match_winner"]:
         if col in pm26.columns:
             pm26[col] = pm26[col].map(lambda x: ABBREV.get(str(x).strip(), x) if pd.notna(x) else np.nan)
@@ -328,7 +331,7 @@ def evaluate_2026_pre_match(match_df: pd.DataFrame, pre_model, sc_pre, pm26_path
     h2h26 = {k: dict(v) for k, v in h2h_hist_full.items()}
 
     pre_results = []
-    for _, r in pm26.sort_values("match_id").iterrows():
+    for _, r in pm26.sort_values(["_sort_date", "match_id"]).iterrows():
         t1, t2, mid = r["team_bat_first"], r["team_bowl_first"], r["match_id"]
         e1, e2 = elo26.get(t1, 1500.0), elo26.get(t2, 1500.0)
         elo_diff = e1 - e2

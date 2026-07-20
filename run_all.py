@@ -132,9 +132,11 @@ def run_dynamic_section(r: Report, df: pd.DataFrame, match_df: pd.DataFrame) -> 
     df1 = build_dynamic_1st(df, match_df)
     dyn = train_dynamic_internal(df2, df1)
     r.row("Dynamic 2nd", Brier=dyn["dyn2"]["brier"], AUC=dyn["dyn2"]["auc"],
-          Acc=dyn["dyn2"]["acc"], ECE=dyn["dyn2"]["ece"], LogLoss=dyn["dyn2"]["log_loss"])
+          Acc=dyn["dyn2"]["acc"], ECE=dyn["dyn2"]["ece"])
+    _classification_row(r, dyn["dyn2"])
     r.row("Dynamic 1st", Brier=dyn["dyn1"]["brier"], AUC=dyn["dyn1"]["auc"],
-          Acc=dyn["dyn1"]["acc"], LogLoss=dyn["dyn1"]["log_loss"])
+          Acc=dyn["dyn1"]["acc"])
+    _classification_row(r, dyn["dyn1"])
     return df1, df2, dyn
 
 
@@ -142,7 +144,8 @@ def run_phase_section(r: Report, dyn: dict) -> dict:
     r.section(3, "PHASE-SPECIFIC EVALUATION (2nd innings)")
     phases = phase_specific_eval(dyn["train2"], dyn["test2"], dyn["dsc2"])
     for name, m in phases.items():
-        r.row(name, AUC=m["auc"], Brier=m["brier"], LogLoss=m["log_loss"], n=m["n"])
+        r.row(name, AUC=m["auc"], Brier=m["brier"], Acc=m["acc"], n=m["n"])
+        _classification_row(r, m)
     return phases
 
 
@@ -183,14 +186,10 @@ def run_external_eval_section(r: Report, match_df: pd.DataFrame) -> dict:
            f"{ext['mcnemar']['model_only_correct']}/{ext['mcnemar']['naive_only_correct']} discordant): "
            f"{ext['p_value_vs_naive']:.3f}")
     c = ext["classification"]
-    cm = c["confusion"]
     r.line(f"Probabilistic (positive class = bat-first side wins): "
            f"Brier={c['brier']:.4f}  LogLoss={c['log_loss']:.4f}  AUC={c['auc']:.4f}  "
            f"BSS={c['bss']:.4f}  ECE={c['ece']:.4f}")
-    r.line(f"Classification @0.5: Prec={c['precision']:.4f}  Rec(Sens)={c['recall']:.4f}  "
-           f"Spec={c['specificity']:.4f}  F1={c['f1']:.4f}")
-    r.line(f"Error rates @0.5:    FPR={c['fpr']:.4f}  FNR={c['fnr']:.4f}  "
-           f"[TN {cm['tn']} FP {cm['fp']} FN {cm['fn']} TP {cm['tp']}]")
+    _classification_row(r, c)
     r.note("significance against 50/50 does not establish improvement over the "
            "naive majority baseline -- the McNemar line above is the "
            "relevant comparison. Pre-match AUC is ~0.51 on internal LOSO "

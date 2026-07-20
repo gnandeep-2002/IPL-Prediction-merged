@@ -37,6 +37,7 @@ class WinProbabilityEngine:
         self.mc_samples = mc_samples
         self.device = device
         self.metadata: dict = {}
+        self._embed_lookup: dict | None = None
 
     @classmethod
     def from_checkpoint(cls, path: str, mc_samples: int = MC_SAMPLES,
@@ -55,9 +56,10 @@ class WinProbabilityEngine:
                 "(player_registry, embed_seed) -- build this engine with "
                 "WinProbabilityEngine.from_checkpoint()")
         from src.alt_transformer_data import build_embedding_lookup, build_features_for_innings
-        lookup = build_embedding_lookup(
-            self.metadata["player_registry"], seed=self.metadata["embed_seed"])
-        return build_features_for_innings(df, lookup)
+        if self._embed_lookup is None:
+            self._embed_lookup = build_embedding_lookup(
+                self.metadata["player_registry"], seed=self.metadata["embed_seed"])
+        return build_features_for_innings(df, self._embed_lookup)
 
     def predict(self, features: np.ndarray) -> WinProbResult:
         T = features.shape[0]

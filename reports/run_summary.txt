@@ -1,6 +1,6 @@
 ==============================================================================
 IPL Win-Probability & Score Prediction -- run_all.py
-Run: 2026-07-17 08:56:01    Matches: 1,146    Deliveries: 273,503
+Run: 2026-07-20 16:46:23    Matches: 1,146    Deliveries: 273,503
 ==============================================================================
 
 ---------- 1. PRE-MATCH MODEL (internal: train <=2020, test >2020) -----------
@@ -17,13 +17,23 @@ Run: 2026-07-17 08:56:01    Matches: 1,146    Deliveries: 273,503
           wins. Threshold metrics use the same 0.5 cutoff as accuracy.
 
 ---------------- 2. DYNAMIC 2ND/1ST-INNINGS MODELS (internal) ----------------
-  Dynamic 2nd          Brier=0.1450  AUC=0.8771  Acc=0.7912  ECE=0.0413  LogLoss=0.4502
-  Dynamic 1st          Brier=0.2204  AUC=0.7012  Acc=0.6389  LogLoss=0.6320
+  Dynamic 2nd          Brier=0.1450  AUC=0.8771  Acc=0.7912  ECE=0.0413
+                       LogLoss=0.4502  Prec=0.8053  Rec=0.7619  Spec=0.8198  F1=0.7830
+                       FPR=0.1802  FNR=0.2381  CM=[TN 16727 FP 3677 FN 4753 TP 15213]
+  Dynamic 1st          Brier=0.2204  AUC=0.7012  Acc=0.6389
+                       LogLoss=0.6320  Prec=0.6184  Rec=0.6655  Spec=0.6139  F1=0.6411
+                       FPR=0.3861  FNR=0.3345  CM=[TN 13689 FP 8608 FN 7013 TP 13952]
 
 ----------------- 3. PHASE-SPECIFIC EVALUATION (2nd innings) -----------------
-  Powerplay (0-6 ov)   AUC=0.8197  Brier=0.1786  LogLoss=0.7596  n=15098
-  Middle (6-15 ov)     AUC=0.8849  Brier=0.1393  LogLoss=0.4410  n=18889
-  Death (15-20 ov)     AUC=0.9532  Brier=0.0844  LogLoss=0.3616  n=6383
+  Powerplay (0-6 ov)   AUC=0.8197  Brier=0.1786  Acc=0.7367  n=15098
+                       LogLoss=0.7596  Prec=0.7872  Rec=0.6749  Spec=0.8033  F1=0.7267
+                       FPR=0.1967  FNR=0.3251  CM=[TN 5837 FP 1429 FN 2546 TP 5286]
+  Middle (6-15 ov)     AUC=0.8849  Brier=0.1393  Acc=0.8046  n=18889
+                       LogLoss=0.4410  Prec=0.8037  Rec=0.8117  Spec=0.7973  F1=0.8077
+                       FPR=0.2027  FNR=0.1883  CM=[TN 7446 FP 1893 FN 1798 TP 7752]
+  Death (15-20 ov)     AUC=0.9532  Brier=0.0844  Acc=0.8828  n=6383
+                       LogLoss=0.3616  Prec=0.8711  Rec=0.8340  Spec=0.9160  F1=0.8521
+                       FPR=0.0840  FNR=0.1660  CM=[TN 3480 FP 319 FN 429 TP 2155]
 
  4. SCORE REGRESSION ZOO (fixed horizons; saved to models/ipl_score_pipeline.pkl) 
   pre_match:
@@ -101,8 +111,8 @@ Run: 2026-07-17 08:56:01    Matches: 1,146    Deliveries: 273,503
   Naive majority-class baseline (always pick the bowl-first side): 63.5%
   p-value vs naive baseline (exact McNemar, 1/1 discordant): 1.000
   Probabilistic (positive class = bat-first side wins): Brier=0.2390  LogLoss=0.6710  AUC=0.5229  BSS=0.0061  ECE=0.0969
-  Classification @0.5: Prec=0.5000  Rec(Sens)=0.0370  Spec=0.9787  F1=0.0690
-  Error rates @0.5:    FPR=0.0213  FNR=0.9630  [TN 46 FP 1 FN 26 TP 1]
+                       LogLoss=0.6710  Prec=0.5000  Rec=0.0370  Spec=0.9787  F1=0.0690
+                       FPR=0.0213  FNR=0.9630  CM=[TN 46 FP 1 FN 26 TP 1]
     note: significance against 50/50 does not establish improvement over the
           naive majority baseline -- the McNemar line above is the relevant
           comparison. Pre-match AUC is ~0.51 on internal LOSO (near-random);

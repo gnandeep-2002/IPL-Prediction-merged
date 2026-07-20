@@ -16,9 +16,13 @@ def build_player_registry(df: pd.DataFrame) -> dict[str, int]:
 
 
 def build_embedding_lookup(registry: dict[str, int], seed: int = SEED) -> dict[str, np.ndarray]:
-    torch.manual_seed(seed)
-    table = PlayerEmbedTable(num_players=len(registry), embed_dim=PLAYER_EMBED_DIM)
-    all_embeds = table.embed.weight.detach().numpy()
+    rng_state = torch.get_rng_state()
+    try:
+        torch.manual_seed(seed)
+        table = PlayerEmbedTable(num_players=len(registry), embed_dim=PLAYER_EMBED_DIM)
+        all_embeds = table.embed.weight.detach().numpy()
+    finally:
+        torch.set_rng_state(rng_state)
     return {name: all_embeds[idx] for name, idx in registry.items()}
 
 
