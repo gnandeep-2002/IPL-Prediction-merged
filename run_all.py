@@ -135,7 +135,7 @@ def run_dynamic_section(r: Report, df: pd.DataFrame, match_df: pd.DataFrame) -> 
           Acc=dyn["dyn2"]["acc"], ECE=dyn["dyn2"]["ece"])
     _classification_row(r, dyn["dyn2"])
     r.row("Dynamic 1st", Brier=dyn["dyn1"]["brier"], AUC=dyn["dyn1"]["auc"],
-          Acc=dyn["dyn1"]["acc"])
+          Acc=dyn["dyn1"]["acc"], ECE=dyn["dyn1"]["ece"])
     _classification_row(r, dyn["dyn1"])
     return df1, df2, dyn
 

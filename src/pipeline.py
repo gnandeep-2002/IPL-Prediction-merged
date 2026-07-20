@@ -178,7 +178,7 @@ def train_dynamic_internal(df2: pd.DataFrame, df1: pd.DataFrame) -> dict:
 
     return {
         "dyn2": classification_metrics(y2, p2),
-        "dyn1": classification_metrics(y1, p1, with_ece=False),
+        "dyn1": classification_metrics(y1, p1),
         "dsc2": dsc2, "dyn2_model": dyn2_model, "train2": train2, "test2": test2,
         "dsc1": dsc1, "dyn1_model": dyn1_model,
     }
