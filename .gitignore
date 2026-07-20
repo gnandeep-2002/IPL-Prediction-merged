@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+reports/figures/*.png
+.venv/
+.DS_Store
+
+# Raw dataset -- not published (see README.md for how to obtain it
+# and place it here before running run_all.py or pytest).
+data/raw/ipl_data.xlsx
+
+# Data pipeline intermediates -- regenerate locally, not published.
+data_pipeline/cricsheet_raw/
+data_pipeline/output/
+
+# Personal reference copies only -- not part of the published project.
+notebooks/
